@@ -8,7 +8,7 @@ import (
 	"net/http"
 )
 
-//go:embed assetlinks.json apple-app-site-association
+//go:embed .well-known
 var staticFs embed.FS
 
 func main() {
