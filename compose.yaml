@@ -8,15 +8,34 @@
 # database or a cache. For examples, see the Awesome Compose repository:
 # https://github.com/docker/awesome-compose
 services:
-  server:
+  web:
     build:
       context: .
       target: final
+    develop:
+      watch:
+      - action: rebuild
+        path: .
+        ignore:
+          - ./x509/
+          - ./Dockerfile
+          - ./compose.yaml
     ports:
       - 3000:${WEB_PORT}
     environment:
       HOST: ${HOST}
+      WEB_SCHEME: ${WEB_SCHEME}
       PORT: ${WEB_PORT}
+      WBAUTHN_RP_ID: ${WBAUTHN_RP_ID}
+      WEB_PRIVATE_KEY_PATH: /run/secrets/private-key
+      WEB_CERT_PATH: /run/secrets/cert
+      ANDROID_KEY_HASH: ${ANDROID_KEY_HASH}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db-password
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      JWT_SECRET_PATH: /run/secrets/jwt-secret
 
 # The commented out section below is an example of how to define a PostgreSQL
 # database that your application can use. `depends_on` tells Docker Compose to
@@ -24,30 +43,53 @@ services:
 # database data between container restarts. The `db-password` secret is used
 # to set the database password. You must create `db/password.txt` and add
 # a password of your choosing to it before running `docker compose up`.
-#     depends_on:
-#       db:
-#         condition: service_healthy
-#   db:
-#     image: postgres
-#     restart: always
-#     user: postgres
-#     secrets:
-#       - db-password
-#     volumes:
-#       - db-data:/var/lib/postgresql/data
-#     environment:
-#       - POSTGRES_DB=example
-#       - POSTGRES_PASSWORD_FILE=/run/secrets/db-password
-#     expose:
-#       - 5432
-#     healthcheck:
-#       test: [ "CMD", "pg_isready" ]
-#       interval: 10s
-#       timeout: 5s
-#       retries: 5
+    secrets:
+      - db-password
+      - private-key
+      - cert
+      - jwt-secret
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+  db:
+    build:
+      context: ./db/
+    restart: always
+    user: postgres
+    secrets:
+      - db-password
+    #volumes:
+      #      - db-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db-password
+    ports:
+      - 5432:${POSTGRES_PORT}
+    healthcheck:
+      test: [ "CMD", "pg_isready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  cache:
+    image: redis/redis-stack
+    expose:
+      - ${RDS_PORT}
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 # volumes:
 #   db-data:
-# secrets:
-#   db-password:
-#     file: db/password.txt
+secrets:
+  db-password:
+    file: db/password.txt
+  private-key:
+    file: x509/localhost-key.pem
+  cert:
+    file: x509/localhost.pem
+  jwt-secret:
+    file: secrets/jwt_secret.txt
 
