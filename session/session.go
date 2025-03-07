@@ -31,7 +31,7 @@ type session struct {
 
 	wbAuthn webauthn.WebAuthn
 
-	secretKey string
+	secretKey []byte
 }
 
 type User struct {
@@ -93,8 +93,8 @@ func New(db *sql.DB, cache redis.Client) Session {
 	// NOTE: prepare sql: create new user
 	createUserStmt, err = db.Prepare(`
 		INSERT INTO
-			users(user_handle, display_name)
-		VALUES( $1, $2)
+			users(user_id, user_handle, display_name)
+		VALUES( $1, $2, $3)
 		`)
 	if err != nil {
 		log.Fatalf("[FATAL] %v", err)
@@ -151,7 +151,7 @@ func New(db *sql.DB, cache redis.Client) Session {
 		createUserStmt:      createUserStmt,
 		createPublicKeyStmt: createPublicKeyStmt,
 		wbAuthn:             *wba,
-		secretKey:           string(apiSecret),
+		secretKey:           apiSecret,
 	}
 }
 
@@ -175,12 +175,11 @@ func (s *session) PostRequestAssertation(w http.ResponseWriter, r *http.Request)
 				UserHandle:  userHandle,
 				DisplayName: displayName,
 			}
-
 			var creation *protocol.CredentialCreation
 			var session *webauthn.SessionData
 			creation, session, err := s.wbAuthn.BeginMediatedRegistration(tempUser, protocol.MediationOptional)
 			if err != nil {
-				http.Error(w, fmt.Sprintf("error during registration: %v", err), http.StatusInternalServerError)
+				http.Error(w, fmt.Sprintf("unable to create challenge: %v", err), http.StatusInternalServerError)
 				return
 			}
 
@@ -233,9 +232,6 @@ func (s *session) PostRequestAssertation(w http.ResponseWriter, r *http.Request)
 				return
 			}
 			return
-		} else {
-			http.Error(w, "unable to create challenge", http.StatusInternalServerError)
-			return
 		}
 	}
 
@@ -243,7 +239,7 @@ func (s *session) PostRequestAssertation(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *session) PostAssertPublicKey(w http.ResponseWriter, r *http.Request) {
-	userHandle := r.FormValue("user_handle")
+	userHandle := r.PathValue("user_handle")
 	if len(userHandle) == 0 {
 		http.Error(w, "user handle can't be empty", http.StatusBadRequest)
 		return
@@ -279,14 +275,15 @@ func (s *session) PostAssertPublicKey(w http.ResponseWriter, r *http.Request) {
 	var credential *webauthn.Credential
 	credential, err = s.wbAuthn.FinishRegistration(&marshalUser, marshalSession, r)
 	if err != nil {
+		fmt.Printf("[ERROR] line 282:\n%s\n", err.Error())
 		http.Error(w, "error verifying public key", http.StatusBadRequest)
 		return
 	}
 
 	// NOTE: create user; if new
-	err = s.readUserHandleStmt.QueryRow(userHandle).Err()
+	err = s.readUserHandleStmt.QueryRow(userHandle).Scan()
 	if errors.Is(err, sql.ErrNoRows) {
-		_, err = s.createUserStmt.Exec(marshalUser.UserHandle, marshalUser.DisplayName)
+		_, err = s.createUserStmt.Exec(userId, marshalUser.UserHandle, marshalUser.DisplayName)
 		if err != nil {
 			http.Error(w, "unable to create user", http.StatusInternalServerError)
 			return
@@ -315,9 +312,13 @@ func (s *session) PostAssertPublicKey(w http.ResponseWriter, r *http.Request) {
 	var accessToken string
 	accessToken, err = token.SignedString(s.secretKey)
 	if err != nil {
+		fmt.Printf("[ERROR] line 319:\n%v\n", err)
 		http.Error(w, "unable to generate user access token", http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Add("Content-Type", r.Header.Get("Accept"))
+	w.WriteHeader(http.StatusCreated)
 
 	// NOTE: refresh_tokens are meant for user that login/sign up via password
 	encoder := json.NewEncoder(w)

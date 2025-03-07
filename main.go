@@ -8,12 +8,12 @@ import (
 
 	"os"
 	"strconv"
-	"time"
 
 	"log"
 	"net/http"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/miltsm/pesan-web/middleware"
 	"github.com/miltsm/pesan-web/session"
 	"github.com/redis/go-redis/v9"
 )
@@ -48,10 +48,10 @@ func main() {
 	sessionHandler := session.New(db, *cache)
 	// NOTE: endpoints
 	router.HandleFunc("POST /public-key/assert/challenge", sessionHandler.PostRequestAssertation)
-	router.HandleFunc("POST /public-key/assert/:user_handle", sessionHandler.PostAssertPublicKey)
+	router.HandleFunc("POST /public-key/assert/{user_handle}", sessionHandler.PostAssertPublicKey)
 	srv := http.Server{
 		Addr:      fmt.Sprintf("%s:%d", os.Getenv("HOST"), port),
-		Handler:   logger(router),
+		Handler:   middleware.Logger(router),
 		TLSConfig: cfg,
 	}
 	fmt.Printf("listening to port %s..\n", srv.Addr)
@@ -100,13 +100,5 @@ func setupCache() *redis.Client {
 		Password: "",
 		DB:       0,
 		Protocol: 2,
-	})
-}
-
-func logger(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		next.ServeHTTP(w, r)
-		log.Printf("[INFO] %s %s\t%s", r.Method, r.RequestURI, time.Since(start))
 	})
 }
