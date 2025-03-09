@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-webauthn/webauthn/protocol"
 )
 
 type DiscoverAssertionReply struct {
-	Challenge []byte `json:"challenge"`
-	Verify    string `json:"verify_link"`
+	Challenge  []byte    `json:"challenge"`
+	ValidUntil time.Time `json:"valid_util"`
+	VerifyLink string    `json:"verify_link"`
 }
 
 func (s *session) PostPublicKeyAssertDiscover(w http.ResponseWriter, r *http.Request) {
@@ -55,8 +57,9 @@ func (s *session) PostPublicKeyAssertDiscover(w http.ResponseWriter, r *http.Req
 
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(&DiscoverAssertionReply{
-		Challenge: marshaledChallenge,
-		Verify:    fmt.Sprintf("/public-key/attest/%v/verify", session.Challenge),
+		Challenge:  marshaledChallenge,
+		ValidUntil: session.Expires,
+		VerifyLink: fmt.Sprintf("/public-key/attest/%v/verify", session.Challenge),
 	})
 	if err != nil {
 		http.Error(w, "unable to encode result", http.StatusInternalServerError)
