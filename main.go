@@ -49,6 +49,7 @@ func main() {
 	// NOTE: endpoints
 	router.HandleFunc("POST /public-key/assert/challenge", sessionHandler.PostRequestAssertation)
 	router.HandleFunc("POST /public-key/assert/{user_handle}", sessionHandler.PostAssertPublicKey)
+	router.HandleFunc("POST /public-key/attest/discover", sessionHandler.PostPublicKeyAssertDiscover)
 	srv := http.Server{
 		Addr:      fmt.Sprintf("%s:%d", os.Getenv("HOST"), port),
 		Handler:   middleware.Logger(router),

@@ -21,6 +21,7 @@ import (
 type Session interface {
 	PostRequestAssertation(w http.ResponseWriter, r *http.Request)
 	PostAssertPublicKey(w http.ResponseWriter, r *http.Request)
+	PostPublicKeyAssertDiscover(w http.ResponseWriter, r *http.Request)
 }
 
 type session struct {
