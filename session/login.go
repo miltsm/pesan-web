@@ -12,7 +12,7 @@ import (
 
 type DiscoverAssertionReply struct {
 	Challenge  []byte    `json:"challenge"`
-	ValidUntil time.Time `json:"valid_util"`
+	ValidUntil time.Time `json:"valid_until"`
 	VerifyLink string    `json:"verify_link"`
 }
 
